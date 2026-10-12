@@ -1,0 +1,45 @@
+name: taskflow
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      # mongosh est lent à démarrer : on laisse de la marge (surtout au premier lancement)
+      interval: 15s
+      timeout: 20s
+      retries: 10
+      start_period: 60s
+      start_interval: 5s
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGO_URI: mongodb://mongo:27017/taskflow
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET manquant dans .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET manquant dans .env}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${PUBLIC_URL:-http://localhost:8080}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+
+volumes:
+  mongo-data:
